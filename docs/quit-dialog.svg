@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="360" viewBox="0 0 420 360">
+<defs><linearGradient id="wall" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1B1F4B"/><stop offset="0.55" stop-color="#3A2A7A"/><stop offset="1" stop-color="#0E5BA8"/></linearGradient><filter id="shadow" x="-20%" y="-10%" width="140%" height="130%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.45"/></filter></defs>
+<rect width="420" height="360" rx="16" fill="url(#wall)"/>
+<g filter="url(#shadow)"><rect x="70" y="24" width="280" height="312" rx="14" fill="#2B2B30" fill-opacity="0.97" stroke="#FFFFFF" stroke-opacity="0.12"/></g>
+<circle cx="210.0" cy="78" r="30" fill="#FFFFFF"/>
+<circle cx="210.0" cy="78" r="26" fill="#1E90FF"/>
+<polygon points="226.0,62 214.0,82 206.0,74" fill="#FF3B30"/>
+<polygon points="194.0,94 214.0,82 206.0,74" fill="#FFFFFF"/>
+<text x="210.0" y="136" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF" text-anchor="middle">Quit “Safari”?</text>
+<text x="210.0" y="160" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="400" fill="#C7C7CC" text-anchor="middle">This affects 20 processes. Quit closes it</text>
+<text x="210.0" y="176" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="400" fill="#C7C7CC" text-anchor="middle">normally, like ⌘Q. Force Quit ends it</text>
+<text x="210.0" y="192" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="400" fill="#C7C7CC" text-anchor="middle">immediately and unsaved changes are lost.</text>
+<rect x="86" y="222" width="248" height="28" rx="7" fill="#0A84FF"/>
+<text x="210.0" y="240.5" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="500" fill="#FFFFFF" text-anchor="middle">Quit</text>
+<rect x="86" y="258" width="248" height="28" rx="7" fill="#48484D"/>
+<text x="210.0" y="276.5" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="500" fill="#FF6961" text-anchor="middle">Force Quit</text>
+<rect x="86" y="294" width="248" height="28" rx="7" fill="#48484D"/>
+<text x="210.0" y="312.5" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="500" fill="#FFFFFF" text-anchor="middle">Cancel</text>
+</svg>

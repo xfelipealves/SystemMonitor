@@ -1,7 +1,9 @@
 #!/bin/zsh
-# Builds a universal (Apple Silicon + Intel) SystemMonitor.app.
-# Usage: ./build.sh            build into ./build
-#        ./build.sh install    build and copy to /Applications
+# Builds a universal (Apple Silicon + Intel) SystemMonitor.app into ./build.
+#
+#   ./build.sh            build the app
+#   ./build.sh zip        build and package build/SystemMonitor.zip for a release
+#   ./build.sh install    build, copy to /Applications and open
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -11,21 +13,29 @@ MIN_MACOS=14.0
 rm -rf build
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
+binaries=()
 for arch in arm64 x86_64; do
-    swiftc -O -target "$arch-apple-macos$MIN_MACOS" Sources/*.swift -o "build/SystemMonitor-$arch"
+    swift build --configuration release --triple "$arch-apple-macosx$MIN_MACOS"
+    binaries+=(".build/$arch-apple-macosx/release/SystemMonitor")
 done
-lipo -create build/SystemMonitor-arm64 build/SystemMonitor-x86_64 -output "$APP/Contents/MacOS/SystemMonitor"
-rm build/SystemMonitor-*
+lipo -create "${binaries[@]}" -output "$APP/Contents/MacOS/SystemMonitor"
 
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
-codesign --force --sign - "$APP"
+codesign --force --sign - "$APP"  # ad-hoc signature; Apple Silicon refuses unsigned binaries
 echo "Built $PWD/$APP"
 
-if [[ "${1:-}" == "install" ]]; then
-    pkill -x SystemMonitor || true
-    rm -rf /Applications/SystemMonitor.app
-    cp -R "$APP" /Applications/
-    open /Applications/SystemMonitor.app
-    echo "Installed to /Applications/SystemMonitor.app"
-fi
+case "${1:-}" in
+    zip)
+        ditto -c -k --keepParent "$APP" build/SystemMonitor.zip
+        echo "Packaged $PWD/build/SystemMonitor.zip"
+        ;;
+    install)
+        pkill -x SystemMonitor || true
+        sleep 1
+        rm -rf /Applications/SystemMonitor.app
+        cp -R "$APP" /Applications/
+        open /Applications/SystemMonitor.app
+        echo "Installed /Applications/SystemMonitor.app"
+        ;;
+esac

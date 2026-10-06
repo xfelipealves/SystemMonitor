@@ -1,7 +1,7 @@
 import AppKit
-import ServiceManagement
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+/// Owns the menu bar item and its menu, and refreshes both on a timer.
+final class StatusMenuController: NSObject, NSMenuDelegate {
     private enum Config {
         static let refreshInterval: TimeInterval = 2
         static let memoryRows = 8
@@ -11,15 +11,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let stats = SystemStats()
     private let sampler = ProcessSampler()
+    private var timer: Timer?
 
-    private let summaryItem = NSMenuItem()
-    private let launchAtLoginItem = NSMenuItem()
+    private var summaryItem = NSMenuItem()
+    private var launchAtLoginItem = NSMenuItem()
     private var memoryItems: [NSMenuItem] = []
     private var cpuItems: [NSMenuItem] = []
     private var isMenuOpen = false
-    private var timer: Timer?
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func start() {
         statusItem.menu = buildMenu()
         refresh()
 
@@ -28,13 +28,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.timer = timer
     }
 
-    // MARK: - Menu
+    // MARK: - Building
 
+    /// Builds the whole menu with the current language. Called again when the language changes.
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.delegate = self
 
-        summaryItem.image = NSImage(systemSymbolName: "chart.bar", accessibilityDescription: nil)
+        summaryItem = NSMenuItem()
+        summaryItem.image = symbol("chart.bar")
         menu.addItem(summaryItem)
 
         menu.addItem(.separator())
@@ -48,30 +50,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         cpuItems.forEach(menu.addItem)
 
         menu.addItem(.separator())
-        launchAtLoginItem.title = L10n.launchAtLogin
-        launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
+        launchAtLoginItem = NSMenuItem(title: L10n.launchAtLogin, action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchAtLoginItem.target = self
-        launchAtLoginItem.image = NSImage(systemSymbolName: "power.circle", accessibilityDescription: nil)
+        launchAtLoginItem.image = symbol("power.circle")
         menu.addItem(launchAtLoginItem)
-        menu.addItem(buildLanguageMenu())
+        menu.addItem(buildLanguageItem())
 
         let quitItem = NSMenuItem(title: L10n.quit, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+        quitItem.image = symbol("power")
         menu.addItem(quitItem)
         return menu
     }
 
-    private func buildLanguageMenu() -> NSMenuItem {
-        let item = NSMenuItem(title: L10n.languageMenu, action: nil, keyEquivalent: "")
-        item.image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+    private func buildLanguageItem() -> NSMenuItem {
         let submenu = NSMenu()
         for language in Language.allCases {
             let option = NSMenuItem(title: language.displayName, action: #selector(selectLanguage(_:)), keyEquivalent: "")
             option.target = self
-            option.representedObject = language.rawValue
+            option.representedObject = language
             option.state = language == L10n.language ? .on : .off
             submenu.addItem(option)
         }
+
+        let item = NSMenuItem(title: L10n.languageMenu, action: nil, keyEquivalent: "")
+        item.image = symbol("globe")
         item.submenu = submenu
         return item
     }
@@ -83,6 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
+    private func symbol(_ name: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)
+    }
+
+    // MARK: - Refreshing
+
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
         refreshMenu()
@@ -91,8 +99,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuDidClose(_ menu: NSMenu) {
         isMenuOpen = false
     }
-
-    // MARK: - Refresh
 
     private func refresh() {
         let cpu = stats.cpuUsage()
@@ -110,17 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                          diskTotal: Formatting.disk(disk.totalBytes))
 
         sampler.sample()
-        if isMenuOpen { refreshMenu() }  // update items in place, so the menu never flickers
+        if isMenuOpen { refreshMenu() }
     }
 
+    /// Updates items in place instead of rebuilding them, so the open menu never flickers.
     private func refreshMenu() {
-        fill(memoryItems, with: sampler.topByMemory(limit: Config.memoryRows)) {
-            Formatting.memory(Int64($0.memoryBytes))
-        }
-        fill(cpuItems, with: sampler.topByCPU(limit: Config.cpuRows)) {
-            Formatting.cpu($0.cpuPercent)
-        }
-        launchAtLoginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        fill(memoryItems, with: sampler.topByMemory(limit: Config.memoryRows)) { Formatting.memory(Int64($0.memoryBytes)) }
+        fill(cpuItems, with: sampler.topByCPU(limit: Config.cpuRows)) { Formatting.cpu($0.cpuPercent) }
+        launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
     }
 
     private func fill(_ items: [NSMenuItem], with groups: [ProcessGroup], value: (ProcessGroup) -> String) {
@@ -129,65 +132,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.image = group.icon
             item.attributedTitle = Formatting.processTitle(name: group.name, value: value(group))
             item.representedObject = group
-            item.action = group.canForceQuit ? #selector(confirmForceQuit(_:)) : nil
-            item.toolTip = group.canForceQuit ? L10n.forceQuitTooltip(processCount: group.pids.count) : L10n.protectedTooltip
+            item.action = group.canQuit ? #selector(quitProcessGroup(_:)) : nil
+            item.toolTip = group.canQuit ? L10n.quitTooltip(processCount: group.pids.count) : L10n.protectedTooltip
         }
         items.dropFirst(groups.count).forEach { $0.isHidden = true }
     }
 
     // MARK: - Actions
 
-    @objc private func confirmForceQuit(_ sender: NSMenuItem) {
+    @objc private func quitProcessGroup(_ sender: NSMenuItem) {
         guard let group = sender.representedObject as? ProcessGroup else { return }
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.icon = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)
-        alert.messageText = L10n.forceQuitTitle(group.name)
-        alert.informativeText = L10n.forceQuitMessage(processCount: group.pids.count)
-        alert.addButton(withTitle: L10n.forceQuitButton)
-        alert.addButton(withTitle: L10n.cancelButton)
-
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        let failures = sampler.forceQuit(group)
+        let failures: Int
+        switch Alerts.askHowToQuit(group) {
+        case .quit: failures = ProcessTerminator.quit(group)
+        case .forceQuit: failures = ProcessTerminator.forceQuit(group)
+        case .cancel: return
+        }
         if failures > 0 {
-            showMessage(L10n.forceQuitFailed(count: failures, name: group.name))
+            Alerts.show(L10n.quitFailed(count: failures, name: group.name))
         }
     }
 
     @objc private func toggleLaunchAtLogin() {
-        let service = SMAppService.mainApp
         do {
-            if service.status == .enabled {
-                try service.unregister()
-            } else {
-                try service.register()
+            if try LaunchAtLogin.toggle() == .needsApproval {
+                Alerts.show(L10n.launchAtLoginApproval)
+                LaunchAtLogin.openSystemSettings()
             }
         } catch {
-            showMessage(L10n.launchAtLoginFailed(error.localizedDescription))
+            Alerts.show(L10n.launchAtLoginFailed(error.localizedDescription))
         }
-
-        if service.status == .requiresApproval {
-            showMessage(L10n.launchAtLoginApproval)
-            SMAppService.openSystemSettingsLoginItems()
-        }
-        launchAtLoginItem.state = service.status == .enabled ? .on : .off
+        launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
     }
 
     @objc private func selectLanguage(_ sender: NSMenuItem) {
-        guard let code = sender.representedObject as? String, let language = Language(rawValue: code) else { return }
+        guard let language = sender.representedObject as? Language else { return }
         L10n.language = language
-        statusItem.menu?.removeAllItems()  // reused items can't belong to two menus
-        statusItem.menu = buildMenu()  // titles are set when items are built
+        statusItem.menu = buildMenu()
         refresh()
-    }
-
-    private func showMessage(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = message
-        NSApp.activate()
-        alert.runModal()
     }
 }

@@ -1,34 +1,37 @@
 import AppKit
 
-/// Text and colors shown in the menu bar and in the dropdown menu.
+/// Text and colors shown in the menu bar and in the menu.
 enum Formatting {
     static let warningThreshold = 75.0
     static let criticalThreshold = 90.0
 
-    private static let memoryFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .memory
-        return formatter
-    }()
+    // MARK: - Numbers (in the app's language, not the system's)
 
-    private static let diskFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
+    static func memory(_ bytes: Int64, locale: Locale = L10n.language.locale) -> String {
+        bytes.formatted(.byteCount(style: .memory).locale(locale))
+    }
 
-    static func memory(_ bytes: Int64) -> String { memoryFormatter.string(fromByteCount: bytes) }
-    static func disk(_ bytes: Int64) -> String { diskFormatter.string(fromByteCount: bytes) }
-    static func cpu(_ percent: Double) -> String { String(format: "%.1f%%", percent) }
+    static func disk(_ bytes: Int64, locale: Locale = L10n.language.locale) -> String {
+        bytes.formatted(.byteCount(style: .file).locale(locale))
+    }
 
-    /// Yellow from 75%, red from 90%, `nil` (menu bar default) below that.
+    /// 84.2 → "84.2%" in English, "84,2%" in Portuguese.
+    static func cpu(_ percent: Double, locale: Locale = L10n.language.locale) -> String {
+        (percent / 100).formatted(.percent.precision(.fractionLength(1)).locale(locale))
+    }
+
+    // MARK: - Alert colors
+
+    /// Yellow from 75%, red from 90%, `nil` (menu bar default color) below that.
     static func alertColor(for percent: Double) -> NSColor? {
         if percent >= criticalThreshold { return .systemRed }
         if percent >= warningThreshold { return .systemYellow }
         return nil
     }
 
-    /// "[icon] 42%   [icon] 81%   [icon] 90%" for the status item.
+    // MARK: - Attributed titles
+
+    /// "[icon] 42%   [icon] 81%   [icon] 90%" for the menu bar item.
     static func statusTitle(_ metrics: [(symbol: String, percent: Double)]) -> NSAttributedString {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
@@ -55,12 +58,10 @@ enum Formatting {
 
     /// "Name ........ value" with the value right-aligned and dimmed.
     static func processTitle(name: String, value: String) -> NSAttributedString {
-        let maxNameLength = 30
-        let shortName = name.count > maxNameLength ? String(name.prefix(maxNameLength - 1)) + "…" : name
         let style = NSMutableParagraphStyle()
         style.tabStops = [NSTextTab(textAlignment: .right, location: 300)]
 
-        let title = NSMutableAttributedString(string: shortName + "\t", attributes: [
+        let title = NSMutableAttributedString(string: truncated(name, to: 30) + "\t", attributes: [
             .font: NSFont.menuFont(ofSize: 0),
             .paragraphStyle: style,
         ])
@@ -70,6 +71,10 @@ enum Formatting {
             .paragraphStyle: style,
         ]))
         return title
+    }
+
+    static func truncated(_ text: String, to maxLength: Int) -> String {
+        text.count > maxLength ? String(text.prefix(maxLength - 1)) + "…" : text
     }
 
     /// Template symbols follow the menu bar color; colored ones are drawn as-is.
