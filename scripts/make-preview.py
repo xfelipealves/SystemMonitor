@@ -6,21 +6,21 @@ MENU_X, MENU_W, ROW = 330, 400, 22
 FONT = "-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif"
 
 memory_rows = [
-    ("Google Chrome", "3,1 GB", "#4285F4"),
-    ("Xcode", "2,4 GB", "#1C8CF0"),
-    ("Páginas web (Safari e apps)", "1,8 GB", "#9AA0A6"),
-    ("Slack", "1,2 GB", "#611F69"),
+    ("Google Chrome", "3.1 GB", "#4285F4"),
+    ("Xcode", "2.4 GB", "#1C8CF0"),
+    ("Safari", "1.8 GB", "#1E90FF"),
+    ("Slack", "1.2 GB", "#611F69"),
     ("Spotify", "640 MB", "#1DB954"),
     ("Figma", "590 MB", "#F24E1E"),
     ("node", "410 MB", "#5F6368"),
     ("Finder", "180 MB", "#3FA9F5"),
 ]
 cpu_rows = [
-    ("Xcode", "84,2%", "#1C8CF0"),
-    ("Google Chrome", "31,5%", "#4285F4"),
-    ("node", "12,0%", "#5F6368"),
-    ("Spotify", "4,3%", "#1DB954"),
-    ("Slack", "2,1%", "#611F69"),
+    ("Xcode", "84.2%", "#1C8CF0"),
+    ("Google Chrome", "31.5%", "#4285F4"),
+    ("node", "12.0%", "#5F6368"),
+    ("Spotify", "4.3%", "#1DB954"),
+    ("Slack", "2.1%", "#611F69"),
 ]
 
 
@@ -71,10 +71,10 @@ for icon, value, color in [(cpu_icon, "23%", "#F2F2F7"), (ram_icon, "81%", "#FFD
     parts.append(icon(x, 8, color))
     parts.append(text(x + 21, 20, value, 13, color, 500))
     x += 68
-parts.append(text(W - 24, 20, "Ter 6 out  17:55", 13, "#F2F2F7", 500, "end"))
+parts.append(text(W - 24, 20, "Tue Oct 6  5:55 PM", 13, "#F2F2F7", 500, "end"))
 
 # Dropdown menu.
-rows = 1 + 1 + len(memory_rows) + 1 + len(cpu_rows) + 2
+rows = 1 + 1 + len(memory_rows) + 1 + len(cpu_rows) + 3
 menu_h = rows * ROW + 3 * 11 + 12
 menu_y = 36
 parts.append(f'<g filter="url(#shadow)"><rect x="{MENU_X}" y="{menu_y}" width="{MENU_W}" height="{menu_h}" rx="11" '
@@ -106,35 +106,38 @@ def process_row(name, value, color, highlighted=False):
     y += ROW
 
 
-parts.append(text(left + 24, y + 15.5, "RAM 12,9 GB / 16 GB   ·   Disco 461 GB / 500 GB"))
+parts.append(text(left + 24, y + 15.5, "RAM 12.9 GB / 16 GB   ·   Disk 461 GB / 500 GB"))
 parts.append(f'<rect x="{left + 2}" y="{y + 9}" width="3" height="8" fill="#F2F2F7"/>'
              f'<rect x="{left + 7}" y="{y + 5}" width="3" height="12" fill="#F2F2F7"/>'
              f'<rect x="{left + 12}" y="{y + 11}" width="3" height="6" fill="#F2F2F7"/>')
 y += ROW
 separator()
-header("Mais usam memória — clique para forçar encerramento")
+header("Top memory — click to force quit")
 for i, row in enumerate(memory_rows):
     process_row(*row, highlighted=(i == 0))
 separator()
-header("Mais usam CPU")
+header("Top CPU")
 for row in cpu_rows:
     process_row(*row)
 separator()
 parts.append(text(left, y + 15.5, "✓", 13, "#F2F2F7", 600))
-parts.append(text(left + 24, y + 15.5, "Abrir ao iniciar o Mac"))
+parts.append(text(left + 24, y + 15.5, "Open at Login"))
 y += ROW
-parts.append(text(left + 24, y + 15.5, "Sair"))
+parts.append(text(left + 24, y + 15.5, "Language"))
+parts.append(text(right, y + 15.5, "›", 15, "#98989D", 400, "end"))
+y += ROW
+parts.append(text(left + 24, y + 15.5, "Quit"))
 parts.append(text(right, y + 15.5, "⌘Q", 13, "#98989D", 400, "end"))
 
 # Callouts.
-parts.append(text(40, 120, "Tempo real", 26, "#FFFFFF", 700))
-parts.append(text(40, 148, "CPU, RAM e disco na", 15, "#D1D1F0"))
-parts.append(text(40, 168, "barra de menus do Mac.", 15, "#D1D1F0"))
+parts.append(text(40, 120, "Real time", 26, "#FFFFFF", 700))
+parts.append(text(40, 148, "CPU, RAM and disk in", 15, "#D1D1F0"))
+parts.append(text(40, 168, "your Mac menu bar.", 15, "#D1D1F0"))
 for i, (color, label) in enumerate([("#F2F2F7", "normal"), ("#FFD60A", "≥ 75%"), ("#FF453A", "≥ 90%")]):
     parts.append(f'<circle cx="48" cy="{210 + i * 26}" r="6" fill="{color}"/>')
     parts.append(text(62, 215 + i * 26, label, 14, "#E5E5F7"))
-parts.append(text(40, 330, "Clique num app para", 15, "#D1D1F0"))
-parts.append(text(40, 350, "forçar o encerramento.", 15, "#D1D1F0"))
+parts.append(text(40, 330, "Click an app to", 15, "#D1D1F0"))
+parts.append(text(40, 350, "force quit it.", 15, "#D1D1F0"))
 parts.append('</svg>')
 
 Path(__file__).resolve().parent.parent.joinpath("docs/preview.svg").write_text("\n".join(parts), encoding="utf-8")

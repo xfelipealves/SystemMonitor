@@ -1,6 +1,5 @@
 import AppKit
 import Darwin
-import UniformTypeIdentifiers
 
 /// One app (with all its helper processes) or one group of same-named command-line processes.
 struct ProcessGroup {
@@ -21,8 +20,15 @@ final class ProcessSampler {
     /// Killing these logs the user out or breaks the session.
     private static let protectedNames: Set<String> = ["loginwindow", "WindowServer", "launchd", "kernel_task"]
 
-    /// Friendly names for processes whose binary name means little to users.
-    private static let displayNames = ["com.apple.WebKit.WebContent": "Páginas web (Safari e apps)"]
+    /// Private libsystem function that maps an XPC service to the app it works for.
+    /// Looked up at runtime so the app keeps working if Apple ever removes it.
+    private static let responsiblePID: ((pid_t) -> pid_t)? = {
+        typealias Function = @convention(c) (pid_t) -> pid_t
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_get_pid_responsible_for_pid")
+        else { return nil }
+        let function = unsafeBitCast(symbol, to: Function.self)
+        return { function($0) }
+    }()
 
     private(set) var groups: [ProcessGroup] = []
 
@@ -57,7 +63,7 @@ final class ProcessSampler {
 
             let identity = Self.identity(of: pid)
             var group = groupsByKey[identity.key]
-                ?? ProcessGroup(key: identity.key, name: identity.name, icon: icon(forBundle: identity.bundlePath))
+                ?? ProcessGroup(key: identity.key, name: identity.name, icon: icon(for: identity))
             group.pids.append(pid)
             group.memoryBytes += usage.ri_phys_footprint
             group.cpuPercent += cpuPercent
@@ -93,13 +99,16 @@ final class ProcessSampler {
         machTicks * UInt64(timebase.numer) / UInt64(timebase.denom)
     }
 
-    private func icon(forBundle bundlePath: String?) -> NSImage {
-        let cacheKey = bundlePath ?? ""
+    private func icon(for identity: Identity) -> NSImage {
+        let cacheKey = identity.bundlePath ?? identity.symbolName
         if let cached = iconCache[cacheKey] { return cached }
 
-        let source = bundlePath.map { NSWorkspace.shared.icon(forFile: $0) }
-            ?? NSWorkspace.shared.icon(for: .unixExecutable)
-        let icon = source.copy() as! NSImage
+        let icon: NSImage
+        if let bundlePath = identity.bundlePath {
+            icon = NSWorkspace.shared.icon(forFile: bundlePath).copy() as! NSImage
+        } else {
+            icon = NSImage(systemSymbolName: identity.symbolName, accessibilityDescription: nil) ?? NSImage()
+        }
         icon.size = NSSize(width: 16, height: 16)
         iconCache[cacheKey] = icon
         return icon
@@ -124,18 +133,45 @@ final class ProcessSampler {
         return result == 0 ? usage : nil
     }
 
-    /// Groups helpers with their app: Chrome helpers live inside "Google Chrome.app".
-    private static func identity(of pid: pid_t) -> (key: String, name: String, bundlePath: String?) {
+    private struct Identity {
+        let key: String
+        let name: String
+        /// App bundle whose icon represents the group, if any.
+        let bundlePath: String?
+        /// SF Symbol used when there is no bundle.
+        var symbolName = "terminal"
+    }
+
+    /// Groups processes with the app they belong to:
+    /// - helpers inside the bundle ("Google Chrome.app/.../Google Chrome Helper")
+    /// - XPC services working for the app (Safari's WebKit web page processes)
+    private static func identity(of pid: pid_t) -> Identity {
         let path = executablePath(of: pid)
-        if let appRange = path.range(of: ".app/") {
-            let bundlePath = String(path[..<appRange.lowerBound]) + ".app"
-            var name = FileManager.default.displayName(atPath: bundlePath)
-            if name.hasSuffix(".app") { name.removeLast(4) }
-            return (bundlePath, name, bundlePath)
+        if let bundlePath = appBundlePath(in: path) {
+            return appIdentity(bundlePath)
+        }
+        if path.contains(".xpc/"), let owner = responsiblePID?(pid), owner > 0, owner != pid,
+           let bundlePath = appBundlePath(in: executablePath(of: owner)) {
+            return appIdentity(bundlePath)
         }
 
         let binaryName = path.isEmpty ? name(of: pid) : (path as NSString).lastPathComponent
-        return ("proc:" + binaryName, displayNames[binaryName] ?? binaryName, nil)
+        let isSystem = path.isEmpty || ["/System/", "/usr/", "/Library/Apple/"].contains { path.hasPrefix($0) }
+        let displayName = binaryName == "com.apple.WebKit.WebContent" ? L10n.webPages : binaryName
+        return Identity(key: "proc:" + binaryName, name: displayName, bundlePath: nil,
+                        symbolName: isSystem ? "gearshape" : "terminal")
+    }
+
+    private static func appIdentity(_ bundlePath: String) -> Identity {
+        var name = FileManager.default.displayName(atPath: bundlePath)
+        if name.hasSuffix(".app") { name.removeLast(4) }
+        return Identity(key: bundlePath, name: name, bundlePath: bundlePath)
+    }
+
+    /// "/Applications/Foo.app/Contents/..." -> "/Applications/Foo.app" (outermost bundle).
+    private static func appBundlePath(in path: String) -> String? {
+        guard let range = path.range(of: ".app/") else { return nil }
+        return String(path[..<range.lowerBound]) + ".app"
     }
 
     private static func executablePath(of pid: pid_t) -> String {

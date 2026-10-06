@@ -13,8 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let sampler = ProcessSampler()
 
     private let summaryItem = NSMenuItem()
-    private let launchAtLoginItem = NSMenuItem(title: "Abrir ao iniciar o Mac",
-                                               action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+    private let launchAtLoginItem = NSMenuItem()
     private var memoryItems: [NSMenuItem] = []
     private var cpuItems: [NSMenuItem] = []
     private var isMenuOpen = false
@@ -39,24 +38,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(summaryItem)
 
         menu.addItem(.separator())
-        menu.addItem(.sectionHeader(title: "Mais usam memória — clique para forçar encerramento"))
+        menu.addItem(.sectionHeader(title: L10n.topMemoryHeader))
         memoryItems = (0..<Config.memoryRows).map { _ in makeProcessItem() }
         memoryItems.forEach(menu.addItem)
 
         menu.addItem(.separator())
-        menu.addItem(.sectionHeader(title: "Mais usam CPU"))
+        menu.addItem(.sectionHeader(title: L10n.topCPUHeader))
         cpuItems = (0..<Config.cpuRows).map { _ in makeProcessItem() }
         cpuItems.forEach(menu.addItem)
 
         menu.addItem(.separator())
+        launchAtLoginItem.title = L10n.launchAtLogin
+        launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
         launchAtLoginItem.target = self
         launchAtLoginItem.image = NSImage(systemSymbolName: "power.circle", accessibilityDescription: nil)
         menu.addItem(launchAtLoginItem)
+        menu.addItem(buildLanguageMenu())
 
-        let quitItem = NSMenuItem(title: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.quit, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         menu.addItem(quitItem)
         return menu
+    }
+
+    private func buildLanguageMenu() -> NSMenuItem {
+        let item = NSMenuItem(title: L10n.languageMenu, action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+        let submenu = NSMenu()
+        for language in Language.allCases {
+            let option = NSMenuItem(title: language.displayName, action: #selector(selectLanguage(_:)), keyEquivalent: "")
+            option.target = self
+            option.representedObject = language.rawValue
+            option.state = language == L10n.language ? .on : .off
+            submenu.addItem(option)
+        }
+        item.submenu = submenu
+        return item
     }
 
     private func makeProcessItem() -> NSMenuItem {
@@ -87,8 +104,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ("memorychip", memory.percent),
             ("internaldrive", disk.percent),
         ])
-        summaryItem.title = "RAM \(Formatting.memory(memory.usedBytes)) / \(Formatting.memory(memory.totalBytes))"
-            + "   ·   Disco \(Formatting.disk(disk.usedBytes)) / \(Formatting.disk(disk.totalBytes))"
+        summaryItem.title = L10n.summary(memoryUsed: Formatting.memory(memory.usedBytes),
+                                         memoryTotal: Formatting.memory(memory.totalBytes),
+                                         diskUsed: Formatting.disk(disk.usedBytes),
+                                         diskTotal: Formatting.disk(disk.totalBytes))
 
         sampler.sample()
         if isMenuOpen { refreshMenu() }  // update items in place, so the menu never flickers
@@ -111,9 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.attributedTitle = Formatting.processTitle(name: group.name, value: value(group))
             item.representedObject = group
             item.action = group.canForceQuit ? #selector(confirmForceQuit(_:)) : nil
-            item.toolTip = group.canForceQuit
-                ? "Clique para forçar o encerramento (\(group.pids.count) processo(s))"
-                : "Processo do sistema — não pode ser encerrado"
+            item.toolTip = group.canForceQuit ? L10n.forceQuitTooltip(processCount: group.pids.count) : L10n.protectedTooltip
         }
         items.dropFirst(groups.count).forEach { $0.isHidden = true }
     }
@@ -126,19 +143,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.icon = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)
-        alert.messageText = "Forçar encerramento de \"\(group.name)\"?"
-        alert.informativeText = group.pids.count > 1
-            ? "\(group.pids.count) processos serão encerrados. Alterações não salvas serão perdidas."
-            : "Alterações não salvas serão perdidas."
-        alert.addButton(withTitle: "Forçar Encerramento")
-        alert.addButton(withTitle: "Cancelar")
+        alert.messageText = L10n.forceQuitTitle(group.name)
+        alert.informativeText = L10n.forceQuitMessage(processCount: group.pids.count)
+        alert.addButton(withTitle: L10n.forceQuitButton)
+        alert.addButton(withTitle: L10n.cancelButton)
 
         NSApp.activate()
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         let failures = sampler.forceQuit(group)
         if failures > 0 {
-            showMessage("Não foi possível encerrar \(failures) processo(s) de \"\(group.name)\".")
+            showMessage(L10n.forceQuitFailed(count: failures, name: group.name))
         }
     }
 
@@ -151,14 +166,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try service.register()
             }
         } catch {
-            showMessage("Não foi possível alterar o início automático: \(error.localizedDescription)")
+            showMessage(L10n.launchAtLoginFailed(error.localizedDescription))
         }
 
         if service.status == .requiresApproval {
-            showMessage("Aprove o SystemMonitor em Ajustes do Sistema → Geral → Itens de Início.")
+            showMessage(L10n.launchAtLoginApproval)
             SMAppService.openSystemSettingsLoginItems()
         }
         launchAtLoginItem.state = service.status == .enabled ? .on : .off
+    }
+
+    @objc private func selectLanguage(_ sender: NSMenuItem) {
+        guard let code = sender.representedObject as? String, let language = Language(rawValue: code) else { return }
+        L10n.language = language
+        statusItem.menu?.removeAllItems()  // reused items can't belong to two menus
+        statusItem.menu = buildMenu()  // titles are set when items are built
+        refresh()
     }
 
     private func showMessage(_ message: String) {

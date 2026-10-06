@@ -1,38 +1,41 @@
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="Ícone do SystemMonitor">
+  <img src="docs/icon.png" width="128" alt="SystemMonitor icon">
 </p>
 
 <h1 align="center">SystemMonitor</h1>
 
+<p align="center"><b>English</b> · <a href="README.pt-BR.md">Português</a></p>
+
 <p align="center">
-  CPU, RAM e disco em tempo real na barra de menus do Mac.<br>
-  Leve, nativo, sem dependências: um app de menos de 1 MB escrito em Swift puro.
+  Real-time CPU, RAM and disk usage in your Mac menu bar.<br>
+  Lightweight and native, with no dependencies: a sub-1 MB app written in pure Swift.
 </p>
 
 <p align="center">
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift&logoColor=white">
   <img alt="Universal" src="https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-6E40C9">
-  <img alt="Licença MIT" src="https://img.shields.io/badge/licen%C3%A7a-MIT-2EA44F">
+  <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2EA44F">
 </p>
 
 <p align="center">
-  <img src="docs/preview.svg" width="760" alt="Ilustração do SystemMonitor: indicadores na barra de menus e menu com os processos que mais consomem memória e CPU">
+  <img src="docs/preview.svg" width="760" alt="Illustration of SystemMonitor: menu bar indicators and a menu listing the apps using the most memory and CPU">
 </p>
 
-## Recursos
+## Features
 
-- **CPU, RAM e disco na barra de menus**, atualizados a cada 2 segundos, com ícones nativos (SF Symbols) que seguem o modo claro e o escuro.
-- **Cores de alerta:** o número fica amarelo a partir de 75% e vermelho a partir de 90%.
-- **Os 8 apps que mais usam memória e os 5 que mais usam CPU**, com os mesmos números do Monitor de Atividade.
-- **Processos agrupados por app:** os processos auxiliares do Chrome, Slack, Teams e outros aparecem somados no app.
-- **Forçar encerramento com um clique**, sempre com confirmação. Processos do sistema aparecem, mas não podem ser encerrados.
-- **Abrir ao iniciar o Mac**, ligado e desligado direto pelo menu.
-- **Discreto:** não aparece no Dock e usa uma fração mínima de CPU.
+- **CPU, RAM and disk in the menu bar**, refreshed every 2 seconds, with native SF Symbols icons that follow light and dark mode.
+- **Alert colors:** a value turns yellow at 75% and red at 90%.
+- **Top 8 apps by memory and top 5 by CPU**, with the same numbers as Activity Monitor.
+- **Processes grouped by app, with the app's icon:** helper processes of Chrome, Slack, Teams, and even Safari's web pages, add up under the app that launched them.
+- **One-click force quit**, always with a confirmation. System processes are listed but can't be quit.
+- **Open at Login**, toggled right from the menu.
+- **English or Portuguese:** English by default; switch in **Language → Português (Brasil)**.
+- **Unobtrusive:** no Dock icon and a tiny CPU footprint.
 
-## Instalação
+## Installation
 
-Requer macOS 14 (Sonoma) ou mais recente e as Command Line Tools do Xcode (`xcode-select --install`).
+Requires macOS 14 (Sonoma) or later and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
 git clone https://github.com/xfelipealves/SystemMonitor.git
@@ -40,60 +43,63 @@ cd SystemMonitor
 ./build.sh install
 ```
 
-O `install` compila o app, copia para `/Applications` e abre. Para só compilar, rode `./build.sh`; o app fica em `build/SystemMonitor.app`.
+`install` builds the app, copies it to `/Applications` and opens it. To only build, run `./build.sh`; the app lands in `build/SystemMonitor.app`.
 
-> O app é assinado localmente (ad-hoc), não pela Apple. Compilando na sua máquina, o macOS abre sem avisos.
+> The app is signed locally (ad-hoc), not by Apple. Built on your own Mac, it opens without warnings.
 
-## Como funciona
+## How it works
 
 ```mermaid
 flowchart LR
-    T(["Timer a cada 2 s"]) --> A[AppDelegate]
+    T(["Timer every 2 s"]) --> A[AppDelegate]
     A --> S[SystemStats]
     A --> P[ProcessSampler]
-    S -- "host_statistics<br>CPU e RAM" --> K[(Kernel macOS)]
-    S -- "URLResourceValues<br>disco" --> K
+    S -- "host_statistics<br>CPU and RAM" --> K[(macOS kernel)]
+    S -- "URLResourceValues<br>disk" --> K
     P -- "libproc<br>proc_pid_rusage" --> K
-    A --> F[Formatting]
-    F --> B["Barra de menus<br>23% · 81% · 92%"]
-    F --> M["Menu<br>top memória · top CPU"]
-    M -- "clique + confirmação" --> X["kill SIGKILL"]
+    A --> F[Formatting + L10n]
+    F --> B["Menu bar<br>23% · 81% · 92%"]
+    F --> M["Menu<br>top memory · top CPU"]
+    M -- "click + confirm" --> X["kill SIGKILL"]
 ```
 
-| Indicador | Origem | Mesmo valor que |
+| Indicator | Source | Matches |
 |---|---|---|
-| CPU | `host_statistics(HOST_CPU_LOAD_INFO)`, diferença entre duas leituras | Monitor de Atividade → CPU |
-| RAM | memória de apps + fixa + comprimida (`host_statistics64`) | Monitor de Atividade → Memória Usada |
-| Disco | volume `/`, espaço liberável conta como livre | Finder → Obter Informações |
-| Processos | `proc_pid_rusage` (`ri_phys_footprint` e tempo de CPU) | Monitor de Atividade → colunas Memória e % CPU |
+| CPU | `host_statistics(HOST_CPU_LOAD_INFO)`, delta between two readings | Activity Monitor → CPU |
+| RAM | app memory + wired + compressed (`host_statistics64`) | Activity Monitor → Memory Used |
+| Disk | `/` volume, purgeable space counted as free | Finder → Get Info |
+| Processes | `proc_pid_rusage` (`ri_phys_footprint` and CPU time) | Activity Monitor → Memory and % CPU columns |
 
-### Estrutura
+Processes are grouped by the outermost `.app` bundle in their path. XPC services, such as WebKit web pages, are assigned to the app responsible for them.
+
+### Project layout
 
 ```
 Sources/
-├── main.swift            inicia o app sem ícone no Dock
-├── AppDelegate.swift     barra de menus, menu, timer e ações
-├── SystemStats.swift     uso total de CPU, RAM e disco
-├── ProcessSampler.swift  memória e CPU por processo, agrupados por app
-└── Formatting.swift      textos, ícones e cores de alerta
-Resources/                Info.plist e ícone do app
-scripts/                  geradores do ícone e da ilustração
+├── main.swift            starts the app without a Dock icon
+├── AppDelegate.swift     menu bar item, menu, timer and actions
+├── SystemStats.swift     total CPU, RAM and disk usage
+├── ProcessSampler.swift  per-process memory and CPU, grouped by app
+├── Formatting.swift      text, icons and alert colors
+└── Localization.swift    English and Portuguese strings
+Resources/                Info.plist and app icon
+scripts/                  icon and illustration generators
 ```
 
-## Limitações
+## Limitations
 
-- Só aparecem os processos do seu usuário. Processos de outros usuários e do sistema (root) não podem ser lidos sem privilégios de administrador.
-- Forçar o encerramento de um grupo encerra todos os processos dele. Por exemplo, encerrar `node` fecha todos os processos `node` abertos.
-- Se a barra de menus estiver cheia, o notch pode esconder o indicador.
+- Only your user's processes are listed. Other users' and system (root) processes can't be read without admin privileges.
+- Force quitting a group quits every process in it. For example, quitting `node` ends every running `node` process.
+- On a crowded menu bar, the notch may hide the indicator.
 
-## Desenvolvimento
+## Development
 
 ```sh
-./build.sh                      # compila em build/
-./scripts/make-icns.sh          # regenera o ícone a partir de scripts/make-icon.swift
-python3 scripts/make-preview.py # regenera docs/preview.svg
+./build.sh                      # build into build/
+./scripts/make-icns.sh          # regenerate the icon from scripts/make-icon.swift
+python3 scripts/make-preview.py # regenerate docs/preview.svg
 ```
 
-## Licença
+## License
 
 [MIT](LICENSE) © 2026 Felipe Alves
